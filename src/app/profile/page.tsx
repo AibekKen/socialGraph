@@ -179,8 +179,16 @@ export default function ProfilePage() {
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between">
           <h1 className="text-xl font-semibold">Профиль</h1>
-          <Link href="/graph" className="text-sm text-indigo-600 hover:underline">
-            К графу
+          <Link
+            href="/graph"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+            aria-label="К графу"
+            title="К графу"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
           </Link>
         </div>
 

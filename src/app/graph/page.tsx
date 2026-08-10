@@ -521,16 +521,22 @@ export default function GraphPage() {
             selected || lastClicked ? "translate-y-0" : "translate-y-full md:translate-y-0"
           }`}
         >
-          <div className="mb-1 flex items-center justify-between md:hidden">
-            <span className="text-sm font-medium text-gray-500">Информация</span>
-            <button
-              onClick={resetToMe}
-              className="rounded-full px-2 py-1 text-sm text-gray-500 hover:bg-gray-100"
-              aria-label="Закрыть"
-            >
-              Закрыть ✕
-            </button>
-          </div>
+          {(selected || lastClicked) && (
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-500 md:hidden">Информация</span>
+              <button
+                onClick={resetToMe}
+                className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="Закрыть"
+                title="Закрыть"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          )}
 
           {selected && (
             <div className="text-sm">
@@ -554,13 +560,8 @@ export default function GraphPage() {
 
           {!selected && lastClicked && (
             <div className="text-sm">
-              <div className="mb-1 flex items-center justify-between">
+              <div className="mb-1">
                 <span className="font-medium">{lastClicked.name}</span>
-                {lastClicked.id !== meId && (
-                  <button onClick={resetToMe} className="text-xs text-gray-500 underline hover:text-gray-700">
-                    Свернуть всё
-                  </button>
-                )}
               </div>
               {lastClicked.headline && <div className="text-gray-500">{lastClicked.headline}</div>}
               <div className="mt-1 text-gray-500">
