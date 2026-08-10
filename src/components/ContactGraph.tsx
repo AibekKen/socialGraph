@@ -59,6 +59,17 @@ function getAvatarImage(url: string): HTMLImageElement {
 
 const BADGE_OFFSET = 0.72;
 
+// Детерминированная стартовая позиция по кругу вокруг центра — та же
+// строка id всегда даёт ту же точку, поэтому пересчёт на каждый рендер не
+// дёргает уже осевшие узлы.
+function initialOffset(id: string): { x: number; y: number } {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  const angle = (hash % 360) * (Math.PI / 180);
+  const radius = 80 + (Math.abs(hash) % 40);
+  return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+}
+
 export default function ContactGraph({
   nodes,
   links,
@@ -75,12 +86,15 @@ export default function ContactGraph({
   const applyForces = useCallback((instance: ForceGraphInstance | null) => {
     fgRef.current = instance;
     if (!instance) return;
-    // сильнее отталкиваем узлы друг от друга и не даём кружкам накладываться
+    // сильнее отталкиваем узлы друг от друга и не даём кружкам накладываться.
+    // Дистанция связи не должна быть меньше отступа коллизии — иначе эти
+    // две силы тянут в разные стороны и узлы застревают где-то посередине,
+    // почти вплотную друг к другу.
     instance.d3Force("charge").strength(-140).distanceMax(400);
-    instance.d3Force("link").distance(60);
+    instance.d3Force("link").distance(100);
     instance.d3Force(
       "collide",
-      forceCollide((n: GraphNode) => (n.isMe ? NODE_RADIUS * 1.7 : NODE_RADIUS) + 14)
+      forceCollide((n: GraphNode) => (n.isMe ? NODE_RADIUS * 1.7 : NODE_RADIUS) + 30)
     );
   }, []);
 
@@ -95,10 +109,28 @@ export default function ContactGraph({
     return () => observer.disconnect();
   }, []);
 
+  const nodeCountRef = useRef(nodes.length);
+  useEffect(() => {
+    // cooldownTicks — разовый бюджет тиков симуляции; когда позже
+    // появляются новые узлы (принят инвайт, раскрыт контакт), их некому
+    // растолкнуть без повторного "разогрева" — иначе они замирают там, где
+    // библиотека их изначально ставит, вплотную к центру (узлу "Вы")
+    if (nodes.length > nodeCountRef.current) {
+      fgRef.current?.d3ReheatSimulation?.();
+    }
+    nodeCountRef.current = nodes.length;
+  }, [nodes.length]);
+
   const graphData = useMemo(
     () => ({
-      // "Вы" закрепляем в центре симуляции — так себя всегда легко найти
-      nodes: nodes.map((n) => (n.isMe ? { ...n, fx: 0, fy: 0 } : { ...n })),
+      // "Вы" закрепляем в центре симуляции — так себя всегда легко найти.
+      // Остальным узлам даём детерминированный стартовый разброс по кругу:
+      // без этого новый узел без x/y стартует ровно в (0,0), там же где
+      // зафиксирован "Вы" — на нулевом расстоянии коллизия не может их
+      // растолкнуть, и узел навсегда "прилипает" поверх своего узла.
+      nodes: nodes.map((n) =>
+        n.isMe ? { ...n, fx: 0, fy: 0 } : { ...n, ...initialOffset(n.id) }
+      ),
       links: links.map((l) => ({ ...l })),
     }),
     [nodes, links]
@@ -144,7 +176,16 @@ export default function ContactGraph({
       if (imgReady) {
         ctx.save();
         ctx.clip();
-        ctx.drawImage(img!, x - r, y - r, r * 2, r * 2);
+        // "object-fit: cover" — кадрируем по меньшей стороне, чтобы не
+        // растягивать не-квадратные фото
+        const iw = img!.naturalWidth;
+        const ih = img!.naturalHeight;
+        const scale = Math.max((r * 2) / iw, (r * 2) / ih);
+        const sw = (r * 2) / scale;
+        const sh = (r * 2) / scale;
+        const sx = (iw - sw) / 2;
+        const sy = (ih - sh) / 2;
+        ctx.drawImage(img!, sx, sy, sw, sh, x - r, y - r, r * 2, r * 2);
         ctx.restore();
       } else {
         ctx.fillStyle = node.isMe ? "#4f46e5" : "#0ea5e9";
