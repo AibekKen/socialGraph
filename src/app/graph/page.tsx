@@ -377,10 +377,14 @@ export default function GraphPage() {
               <div className="relative">
                 <button
                   onClick={() => setShowNotifications((v) => !v)}
-                  className="relative rounded border border-gray-300 px-2 py-1 text-gray-600 hover:bg-gray-50"
+                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
                   aria-label="Уведомления"
+                  title="Уведомления"
                 >
-                  🔔
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
                   {pendingRequests.length > 0 && (
                     <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
                       {pendingRequests.length}
@@ -422,15 +426,29 @@ export default function GraphPage() {
                 )}
               </div>
 
-              <a href="/profile" className="rounded border border-gray-300 px-2 py-1 text-gray-600 hover:bg-gray-50">
-                Профиль
+              <a
+                href="/profile"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                aria-label="Профиль"
+                title="Профиль"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
               </a>
               <span className="hidden truncate max-w-[140px] sm:inline">{userEmail}</span>
               <button
                 onClick={handleLogout}
-                className="rounded border border-gray-300 px-2 py-1 text-gray-600 hover:bg-gray-50"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                aria-label="Выйти"
+                title="Выйти"
               >
-                Выйти
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
               </button>
             </div>
           )}
