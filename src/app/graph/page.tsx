@@ -389,7 +389,7 @@ export default function GraphPage() {
                 </button>
 
                 {showNotifications && (
-                  <div className="absolute right-0 top-full z-40 mt-1 w-80 max-w-[90vw] rounded border border-gray-200 bg-white text-sm shadow-lg">
+                  <div className="fixed left-2 right-2 top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-40 max-h-[70vh] overflow-y-auto rounded border border-gray-200 bg-white text-sm shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:max-h-none sm:w-80">
                     {pendingRequests.length === 0 ? (
                       <p className="p-3 text-gray-500">Новых заявок нет</p>
                     ) : (
