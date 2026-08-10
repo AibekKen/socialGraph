@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { formatPhoneMask } from "@/lib/phone";
 
 type ProfileForm = {
   fullName: string;
@@ -15,22 +16,6 @@ type ProfileForm = {
   visibleInSearch: boolean;
   networkVisible: boolean;
 };
-
-function formatPhoneMask(raw: string): string {
-  let digits = raw.replace(/\D/g, "");
-  if (digits.length === 0) return "";
-  if (digits.startsWith("8")) digits = "7" + digits.slice(1);
-  if (!digits.startsWith("7")) digits = "7" + digits;
-  digits = digits.slice(0, 11);
-
-  const rest = digits.slice(1);
-  let out = "+7";
-  if (rest.length > 0) out += " " + rest.slice(0, 3);
-  if (rest.length >= 4) out += " " + rest.slice(3, 6);
-  if (rest.length >= 7) out += "-" + rest.slice(6, 8);
-  if (rest.length >= 9) out += "-" + rest.slice(8, 10);
-  return out;
-}
 
 const EMPTY: ProfileForm = {
   fullName: "",
@@ -54,6 +39,14 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [headlineOptions, setHeadlineOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.rpc("list_headlines").then(({ data }) => {
+      setHeadlineOptions(((data ?? []) as { headline: string }[]).map((r) => r.headline));
+    });
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -235,11 +228,18 @@ export default function ProfilePage() {
         <input
           id="headline"
           type="text"
+          list="headline-options"
           value={form.headline}
           onChange={(e) => setForm({ ...form, headline: e.target.value })}
           className="mb-4 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
           placeholder="Профессия"
+          autoComplete="off"
         />
+        <datalist id="headline-options">
+          {headlineOptions.map((h) => (
+            <option key={h} value={h} />
+          ))}
+        </datalist>
 
         <div className="mb-4 border-t border-gray-100 pt-4">
           <p className="mb-3 text-sm font-medium text-gray-700">Контакты</p>

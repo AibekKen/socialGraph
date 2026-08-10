@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ContactGraph, { GraphLink, GraphNode } from "@/components/ContactGraph";
 import { createClient } from "@/lib/supabase/client";
+import { formatPhoneMask } from "@/lib/phone";
 import {
   loadMe,
   loadEgoNetwork,
@@ -77,6 +78,28 @@ export default function GraphPage() {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSaving, setInviteSaving] = useState(false);
+  const [contactPickerSupported, setContactPickerSupported] = useState(false);
+
+  useEffect(() => {
+    setContactPickerSupported(
+      typeof navigator !== "undefined" && "contacts" in navigator && "ContactsManager" in window
+    );
+  }, []);
+
+  const pickContact = async () => {
+    try {
+      // Contact Picker API — поддерживается только в Chrome на Android (HTTPS)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nav = navigator as any;
+      const contacts = await nav.contacts.select(["name", "tel"], { multiple: false });
+      const contact = contacts?.[0];
+      if (!contact) return;
+      if (contact.tel?.[0]) setInvitePhone(formatPhoneMask(contact.tel[0]));
+      if (contact.name?.[0]) setInviteName(contact.name[0]);
+    } catch {
+      // пользователь отменил выбор или запретил доступ — ничего не делаем
+    }
+  };
 
   useEffect(() => {
     if (!meId || modalStep !== "search") return;
@@ -273,13 +296,17 @@ export default function GraphPage() {
   };
 
   const createInvite = async () => {
-    if (!meId || !inviteName.trim()) return;
+    if (!meId || !invitePhone.trim()) return;
     setInviteSaving(true);
     setInviteError(null);
     const supabase = createClient();
     const { data, error } = await supabase
       .from("invites")
-      .insert({ inviter_id: meId, invitee_name: inviteName.trim(), invitee_contact: invitePhone.trim() || null })
+      .insert({
+        inviter_id: meId,
+        invitee_name: inviteName.trim() || invitePhone.trim(),
+        invitee_contact: invitePhone.trim(),
+      })
       .select("token")
       .single();
 
@@ -288,7 +315,13 @@ export default function GraphPage() {
       setInviteError(error?.message ?? "Не удалось создать приглашение");
       return;
     }
-    setInviteLink(`${window.location.origin}/invite/${data.token}`);
+    const link = `${window.location.origin}/invite/${data.token}`;
+    setInviteLink(link);
+
+    if (invitePhone.trim()) {
+      const text = `Привет! Присоединяйся к моей сети знакомых — так тебя смогут найти через общих знакомых, когда будут искать специалиста вроде тебя: ${link}`;
+      window.open(`https://wa.me/${invitePhone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`, "_blank");
+    }
   };
 
   const closeInviteModal = () => {
@@ -649,36 +682,40 @@ export default function GraphPage() {
             {modalStep === "invite" && !inviteLink && (
               <>
                 <p className="mb-4 text-sm text-gray-500">
-                  Создайте ссылку-приглашение и отправьте её сами в WhatsApp или Instagram. Когда
-                  человек зарегистрируется, вы увидите заявку на связь.
+                  Создадим ссылку-приглашение и сразу откроем WhatsApp с готовым сообщением. Своё
+                  имя человек укажет сам при регистрации.
                 </p>
 
-                <label className="mb-1 block text-sm font-medium text-gray-700">Имя</label>
-                <input
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  className="mb-3 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
-                  placeholder="Аслан Касымов"
-                />
-
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Телефон/WhatsApp <span className="font-normal text-gray-400">(необязательно)</span>
-                </label>
-                <input
-                  value={invitePhone}
-                  onChange={(e) => setInvitePhone(e.target.value)}
-                  className="mb-4 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
-                  placeholder="+7 700 000-00-00"
-                />
+                <label className="mb-1 block text-sm font-medium text-gray-700">WhatsApp</label>
+                <div className="mb-4 flex items-center gap-2">
+                  <input
+                    value={invitePhone}
+                    onChange={(e) => setInvitePhone(formatPhoneMask(e.target.value))}
+                    type="tel"
+                    className="min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
+                    placeholder="+7 700 000-00-00"
+                  />
+                  {contactPickerSupported && (
+                    <button
+                      type="button"
+                      onClick={pickContact}
+                      title="Выбрать из контактов"
+                      aria-label="Выбрать из контактов"
+                      className="flex min-h-[40px] shrink-0 items-center justify-center rounded border border-gray-300 px-3 text-gray-600 hover:bg-gray-50"
+                    >
+                      📇
+                    </button>
+                  )}
+                </div>
 
                 {inviteError && <p className="mb-3 text-sm text-red-600">{inviteError}</p>}
 
                 <button
                   onClick={createInvite}
-                  disabled={inviteSaving || !inviteName.trim()}
-                  className="mb-2 min-h-[40px] w-full rounded bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                  disabled={inviteSaving || !invitePhone.trim()}
+                  className="mb-2 min-h-[40px] w-full rounded bg-green-600 px-3 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-60"
                 >
-                  {inviteSaving ? "Создаём…" : "Создать ссылку"}
+                  {inviteSaving ? "Отправляем…" : "Отправить в WhatsApp"}
                 </button>
                 <button
                   onClick={() => setModalStep("search")}
@@ -691,7 +728,7 @@ export default function GraphPage() {
 
             {modalStep === "invite" && inviteLink && (
               <>
-                <p className="mb-3 text-sm text-gray-500">Ссылка готова — отправьте её {inviteName}:</p>
+                <p className="mb-3 text-sm text-gray-500">Ссылка готова — WhatsApp уже открылся:</p>
                 <div className="mb-3 flex items-center gap-2">
                   <input
                     readOnly
@@ -716,7 +753,7 @@ export default function GraphPage() {
                     rel="noopener noreferrer"
                     className="mb-3 block min-h-[40px] rounded bg-green-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-green-700"
                   >
-                    Отправить в WhatsApp
+                    Открыть WhatsApp ещё раз
                   </a>
                 )}
 
