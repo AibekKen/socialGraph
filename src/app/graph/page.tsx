@@ -682,8 +682,7 @@ export default function GraphPage() {
             {modalStep === "invite" && !inviteLink && (
               <>
                 <p className="mb-4 text-sm text-gray-500">
-                  Создадим ссылку-приглашение и сразу откроем WhatsApp с готовым сообщением. Своё
-                  имя человек укажет сам при регистрации.
+                  Отправьте приглашение, чтобы добавить человека в свою сеть знакомств.
                 </p>
 
                 <label className="mb-1 block text-sm font-medium text-gray-700">WhatsApp</label>
@@ -715,7 +714,7 @@ export default function GraphPage() {
                   disabled={inviteSaving || !invitePhone.trim()}
                   className="mb-2 min-h-[40px] w-full rounded bg-green-600 px-3 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-60"
                 >
-                  {inviteSaving ? "Отправляем…" : "Отправить в WhatsApp"}
+                  {inviteSaving ? "Отправляем…" : "Отправить приглашение"}
                 </button>
                 <button
                   onClick={() => setModalStep("search")}
