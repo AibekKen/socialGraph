@@ -18,6 +18,7 @@ function SignupForm() {
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get("invite");
   const [fullName, setFullName] = useState("");
+  const [headline, setHeadline] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +46,7 @@ function SignupForm() {
       email,
       password,
       options: {
-        data: { full_name: fullName },
+        data: { full_name: fullName, headline: headline.trim() || null },
         emailRedirectTo: redirectUrl.toString(),
       },
     });
@@ -62,7 +63,9 @@ function SignupForm() {
 
     if (data.session && data.user) {
       // подтверждение по email отключено в проекте — сессия уже активна
-      await supabase.from("profiles").upsert({ id: data.user.id, full_name: fullName });
+      await supabase
+        .from("profiles")
+        .upsert({ id: data.user.id, full_name: fullName, headline: headline.trim() || null });
       if (inviteToken) {
         await supabase.rpc("accept_invite", { p_token: inviteToken });
       }
@@ -97,7 +100,9 @@ function SignupForm() {
     <div className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h1 className="mb-1 text-xl font-semibold">Регистрация</h1>
-        <p className="mb-5 text-sm text-gray-500">Добавьте свои полезные контакты, чтобы о них узнали другие</p>
+        <p className="mb-5 text-sm text-gray-500">
+          Специалисты, которых лично знают ваши знакомые — а не случайные люди из чата
+        </p>
 
         {inviteToken && (
           <p className="mb-4 rounded bg-indigo-50 p-3 text-sm text-indigo-800">
@@ -121,6 +126,18 @@ function SignupForm() {
               onChange={(e) => setFullName(e.target.value)}
               className="mb-3 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
               placeholder="Аслан Касымов"
+            />
+
+            <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="headline">
+              Профессия <span className="font-normal text-gray-400">(необязательно)</span>
+            </label>
+            <input
+              id="headline"
+              type="text"
+              value={headline}
+              onChange={(e) => setHeadline(e.target.value)}
+              className="mb-3 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
+              placeholder="Профессия"
             />
 
             <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="email">

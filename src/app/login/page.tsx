@@ -44,7 +44,9 @@ export default function LoginPage() {
     <div className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h1 className="mb-1 text-xl font-semibold">Вход</h1>
-        <p className="mb-5 text-sm text-gray-500">Граф контактов — войдите, чтобы продолжить</p>
+        <p className="mb-5 text-sm text-gray-500">
+          Специалисты, которых лично знают ваши знакомые — а не случайные люди из чата
+        </p>
 
         <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="email">
           Email

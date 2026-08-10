@@ -168,6 +168,13 @@ export default function ProfilePage() {
     setSaved(true);
   };
 
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  };
+
   const hasAnyContact = form.phone || form.whatsapp || form.instagram;
 
   if (loading) {
@@ -181,7 +188,7 @@ export default function ProfilePage() {
           <h1 className="text-xl font-semibold">Профиль</h1>
           <Link
             href="/graph"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
             aria-label="К графу"
             title="К графу"
           >
@@ -342,9 +349,17 @@ export default function ProfilePage() {
         <button
           type="submit"
           disabled={saving}
-          className="min-h-[40px] w-full rounded bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+          className="min-h-[44px] w-full rounded bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
         >
           {saving ? "Сохраняем…" : "Сохранить"}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-3 min-h-[44px] w-full rounded border border-gray-300 px-3 text-sm text-gray-600 hover:bg-gray-50"
+        >
+          Выйти
         </button>
       </form>
     </div>

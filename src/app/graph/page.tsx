@@ -78,6 +78,7 @@ export default function GraphPage() {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSaving, setInviteSaving] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [contactPickerSupported, setContactPickerSupported] = useState(false);
 
   useEffect(() => {
@@ -203,13 +204,6 @@ export default function GraphPage() {
     }, 300);
     return () => clearTimeout(id);
   }, [query, meId]);
-
-  const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
 
   const respondToRequest = async (connectionId: string, accept: boolean) => {
     const supabase = createClient();
@@ -357,12 +351,30 @@ export default function GraphPage() {
     <div className="flex h-dvh w-screen flex-col overflow-hidden">
       <header className="flex flex-col gap-2 border-b border-gray-200 p-3 md:flex-row md:items-center md:gap-4 md:px-4 md:py-3">
         <div className="flex w-full items-center justify-between gap-2 md:w-auto">
-          <h1 className="text-base font-semibold md:text-lg">Граф контактов</h1>
+          <h1 className="flex items-center gap-2 text-base font-semibold md:text-lg">
+            <svg width="24" height="24" viewBox="0 0 100 100" aria-hidden="true">
+              <polygon
+                points="82,50 66,22.29 34,22.29 18,50 34,77.71 66,77.71"
+                fill="none"
+                stroke="#4f46e5"
+                strokeWidth="4"
+                strokeLinejoin="round"
+              />
+              <circle cx="82" cy="50" r="7" fill="#a5b4fc" />
+              <circle cx="66" cy="22.29" r="7" fill="#a5b4fc" />
+              <circle cx="34" cy="22.29" r="7" fill="#a5b4fc" />
+              <circle cx="18" cy="50" r="7" fill="#a5b4fc" />
+              <circle cx="34" cy="77.71" r="7" fill="#a5b4fc" />
+              <circle cx="66" cy="77.71" r="7" fill="#a5b4fc" />
+              <circle cx="50" cy="50" r="13" fill="#4f46e5" />
+            </svg>
+            Круг доверия
+          </h1>
           {userEmail && (
             <div className="flex items-center gap-2 text-xs text-gray-500 md:order-last">
               <button
                 onClick={() => setShowInviteModal(true)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50 md:flex"
                 aria-label="Добавить контакт"
                 title="Добавить контакт"
               >
@@ -377,7 +389,7 @@ export default function GraphPage() {
               <div className="relative">
                 <button
                   onClick={() => setShowNotifications((v) => !v)}
-                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                  className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
                   aria-label="Уведомления"
                   title="Уведомления"
                 >
@@ -428,7 +440,7 @@ export default function GraphPage() {
 
               <a
                 href="/profile"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
                 aria-label="Профиль"
                 title="Профиль"
               >
@@ -438,25 +450,13 @@ export default function GraphPage() {
                 </svg>
               </a>
               <span className="hidden truncate max-w-[140px] sm:inline">{userEmail}</span>
-              <button
-                onClick={handleLogout}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                aria-label="Выйти"
-                title="Выйти"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
-              </button>
             </div>
           )}
         </div>
 
         <div className="relative w-full md:max-w-sm">
           <input
-            className="min-h-[40px] w-full rounded border border-gray-300 px-3 text-base md:text-sm"
+            className="min-h-[44px] w-full rounded border border-gray-300 px-3 text-base md:min-h-[40px] md:text-sm"
             placeholder="Найти специалиста (напр. дизайнер)"
             value={query}
             onChange={(e) => {
@@ -487,7 +487,22 @@ export default function GraphPage() {
         </div>
       </header>
 
-      {!path && (
+      {!path && nodes.length <= 1 && (
+        <div className="flex items-center justify-between gap-3 border-b border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+          <span>
+            Ваша сеть пока пуста. Пригласите первого знакомого — так о нём узнают через вас, и
+            наоборот.
+          </span>
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="shrink-0 rounded-full bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-700"
+          >
+            Пригласить
+          </button>
+        </div>
+      )}
+
+      {!path && nodes.length > 1 && (
         <p className="border-b border-gray-100 px-3 py-1.5 text-xs text-gray-500">
           Нажмите на человека на графе, затем — «Раскрыть контакты». Добавьте свои полезные
           контакты, чтобы о них узнали другие.
@@ -526,7 +541,7 @@ export default function GraphPage() {
               <span className="text-sm font-medium text-gray-500 md:hidden">Информация</span>
               <button
                 onClick={resetToMe}
-                className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+                className="-mr-2 ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
                 aria-label="Закрыть"
                 title="Закрыть"
               >
@@ -755,10 +770,14 @@ export default function GraphPage() {
                     onFocus={(e) => e.target.select()}
                   />
                   <button
-                    onClick={() => navigator.clipboard.writeText(inviteLink)}
+                    onClick={() => {
+                      navigator.clipboard.writeText(inviteLink);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 1500);
+                    }}
                     className="min-h-[40px] shrink-0 rounded border border-gray-300 px-3 text-sm hover:bg-gray-50"
                   >
-                    Скопировать
+                    {linkCopied ? "Скопировано ✓" : "Скопировать"}
                   </button>
                 </div>
 

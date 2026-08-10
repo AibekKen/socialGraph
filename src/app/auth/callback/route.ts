@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     if (!error && data.user) {
       const { data: existing } = await supabase
         .from("profiles")
-        .select("avatar_url")
+        .select("avatar_url, headline")
         .eq("id", data.user.id)
         .maybeSingle();
 
@@ -27,6 +27,7 @@ export async function GET(request: Request) {
         id: data.user.id,
         full_name: data.user.user_metadata?.full_name ?? data.user.email ?? "Без имени",
         avatar_url: existing?.avatar_url ?? googleAvatar,
+        headline: existing?.headline ?? data.user.user_metadata?.headline ?? null,
       });
       if (inviteToken) {
         // не блокируем вход, если приглашение уже устарело/использовано
