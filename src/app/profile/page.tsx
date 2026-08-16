@@ -309,7 +309,7 @@ export default function ProfilePage() {
             <span>
               Показывать мои контакты знакомым в графе
               {!hasAnyContact && (
-                <span className="block text-xs text-gray-400">Сначала заполните хотя бы один контакт</span>
+                <span className="block text-xs text-gray-500">Сначала заполните хотя бы один контакт</span>
               )}
             </span>
           </label>
@@ -323,7 +323,7 @@ export default function ProfilePage() {
             />
             <span>
               Показывать меня в поиске
-              <span className="block text-xs text-gray-400">Меня можно будет найти по имени/специальности</span>
+              <span className="block text-xs text-gray-500">Меня можно будет найти по имени/специальности</span>
             </span>
           </label>
 
@@ -336,7 +336,7 @@ export default function ProfilePage() {
             />
             <span>
               Показывать мою сеть посторонним
-              <span className="block text-xs text-gray-400">
+              <span className="block text-xs text-gray-500">
                 Кого я знаю, смогут раскрыть на графе другие — не только мои прямые контакты
               </span>
             </span>

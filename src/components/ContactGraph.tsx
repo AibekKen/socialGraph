@@ -41,6 +41,7 @@ type Props = {
   onAddContactClick?: (node: GraphNode) => void;
   expandedIds?: Set<string>;
   highlightIds?: Set<string>;
+  focusId?: string;
 };
 
 const NODE_RADIUS = 14;
@@ -78,6 +79,7 @@ export default function ContactGraph({
   onAddContactClick,
   expandedIds,
   highlightIds,
+  focusId,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphInstance>(null);
@@ -120,6 +122,29 @@ export default function ContactGraph({
     }
     nodeCountRef.current = nodes.length;
   }, [nodes.length]);
+
+  useEffect(() => {
+    if (!focusId) return;
+    // узел мог только что появиться и ещё не получить позицию от симуляции —
+    // пробуем несколько раз, пока она не появится, вместо одной попытки
+    let cancelled = false;
+    let attempts = 0;
+    const tryFocus = () => {
+      if (cancelled) return;
+      const fg = fgRef.current;
+      const target = fg?.graphData?.()?.nodes?.find((n: GraphNode & { x?: number; y?: number }) => n.id === focusId);
+      if (target && typeof target.x === "number" && typeof target.y === "number") {
+        fg.centerAt(target.x, target.y, 600);
+        if (fg.zoom() < 2) fg.zoom(2, 600);
+        return;
+      }
+      if (attempts++ < 15) setTimeout(tryFocus, 100);
+    };
+    tryFocus();
+    return () => {
+      cancelled = true;
+    };
+  }, [focusId]);
 
   const graphData = useMemo(
     () => ({

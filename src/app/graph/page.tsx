@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ContactGraph, { GraphLink, GraphNode } from "@/components/ContactGraph";
 import { createClient } from "@/lib/supabase/client";
@@ -41,6 +41,10 @@ export default function GraphPage() {
 
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [links, setLinks] = useState<GraphLink[]>([]);
+  const nodesRef = useRef<GraphNode[]>(nodes);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const [query, setQuery] = useState("");
@@ -264,11 +268,16 @@ export default function GraphPage() {
     setQuery(person.name);
     setPathLoading(true);
 
+    // сам искомый человек должен появиться на графе и подсветиться, даже
+    // если подтверждённого пути к нему ещё нет — иначе поиск выглядит так,
+    // будто ничего не произошло
+    setNodes((prev) => (prev.some((n) => n.id === person.id) ? prev : mergeNodes(prev, [person])));
+
     const p = await findPathTo(meId, person.id);
     setPath(p);
 
     if (p && p.length > 0) {
-      const missing = p.filter((id) => !nodes.some((n) => n.id === id));
+      const missing = p.filter((id) => !nodesRef.current.some((n) => n.id === id));
       if (missing.length > 0) {
         const extra = await loadProfilesByIds(missing, meId);
         setNodes((prev) => mergeNodes(prev, extra));
@@ -329,6 +338,12 @@ export default function GraphPage() {
     setInviteLink(null);
     setInviteError(null);
   };
+
+  const searchHighlightIds = useMemo(() => {
+    if (selected) return new Set([selected.id]);
+    if (query.trim() && suggestions.length > 0) return new Set(suggestions.map((s) => s.id));
+    return undefined;
+  }, [selected, query, suggestions]);
 
   const { visibleNodes, visibleLinks } = useMemo(() => {
     if (path) {
@@ -405,7 +420,7 @@ export default function GraphPage() {
                 </button>
 
                 {showNotifications && (
-                  <div className="fixed left-2 right-2 top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-40 max-h-[70vh] overflow-y-auto rounded border border-gray-200 bg-white text-sm shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:max-h-none sm:w-80">
+                  <div className="fixed left-2 right-2 top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-40 max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:max-h-none sm:w-80">
                     {pendingRequests.length === 0 ? (
                       <p className="p-3 text-gray-500">Новых заявок нет</p>
                     ) : (
@@ -467,7 +482,7 @@ export default function GraphPage() {
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
           />
           {showSuggestions && (searching || suggestions.length > 0) && (
-            <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded border border-gray-200 bg-white text-sm shadow-lg">
+            <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-lg">
               {searching && <li className="px-3 py-2.5 text-gray-400">Ищем…</li>}
               {!searching &&
                 suggestions.map((s) => (
@@ -478,7 +493,7 @@ export default function GraphPage() {
                       className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50"
                     >
                       <span className="font-medium text-gray-900">{s.name}</span>
-                      {s.headline && <span className="ml-auto text-xs text-gray-400">{s.headline}</span>}
+                      {s.headline && <span className="ml-auto text-xs text-gray-500">{s.headline}</span>}
                     </button>
                   </li>
                 ))}
@@ -527,6 +542,8 @@ export default function GraphPage() {
               }}
               onAddContactClick={() => setShowInviteModal(true)}
               expandedIds={expandedIds}
+              highlightIds={searchHighlightIds}
+              focusId={selected?.id}
             />
           )}
         </main>
@@ -618,7 +635,7 @@ export default function GraphPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="text-gray-400">Человек не разрешил делиться своими контактами</div>
+                    <div className="text-gray-500">Человек не разрешил делиться своими контактами</div>
                   )}
                 </div>
               )}

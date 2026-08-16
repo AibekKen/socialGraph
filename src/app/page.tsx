@@ -6,7 +6,7 @@ function NetworkPreview() {
   return (
     <svg
       viewBox="0 0 360 275"
-      className="mx-auto h-auto w-full max-w-sm"
+      className="mx-auto h-auto w-full"
       role="img"
       aria-label="Схема: вы ищете фотографа, и граф подсвечивает его среди знакомых ваших знакомых"
     >
@@ -40,7 +40,7 @@ function NetworkPreview() {
       <line x1="220" y1="150" x2="290" y2="90" stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="3 3" />
 
       <circle cx="90" cy="140" r="34" fill="url(#meGlow)" />
-      <image href="https://i.pravatar.cc/72?img=59" x="70" y="120" width="40" height="40" clipPath="url(#clipMe)" preserveAspectRatio="xMidYMid slice" />
+      <image href="https://i.pravatar.cc/72?img=13" x="70" y="120" width="40" height="40" clipPath="url(#clipMe)" preserveAspectRatio="xMidYMid slice" />
       <circle cx="90" cy="140" r="20" fill="none" stroke="#4f46e5" strokeWidth="2.5" />
       <rect x="76" y="160" width="28" height="14" rx="7" fill="#4f46e5" />
       <text x="90" y="170" textAnchor="middle" fontSize="10" fontWeight="600" fill="#ffffff">
@@ -88,76 +88,66 @@ export default async function Home() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50 p-4 py-10">
-      <div className="w-full max-w-4xl overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm md:grid md:grid-cols-2">
-        <div className="flex flex-col items-center justify-center gap-2 bg-indigo-50/60 p-8">
-          <NetworkPreview />
-          <p className="mt-1 max-w-[280px] text-center text-xs text-gray-400">
-            Граф подсветит специалиста даже среди знакомых ваших знакомых.
-          </p>
+    <div className="flex h-dvh flex-col items-center justify-center overflow-hidden bg-gray-50 px-4 py-3 text-center md:h-auto md:min-h-dvh md:overflow-visible md:py-10">
+      <div className="mx-auto w-full max-w-2xl">
+        <div className="mb-2 flex items-center justify-center gap-2 md:mb-4">
+          <svg width="22" height="22" viewBox="0 0 100 100" aria-hidden="true" className="md:h-7 md:w-7">
+            <polygon
+              points="82,50 66,22.29 34,22.29 18,50 34,77.71 66,77.71"
+              fill="none"
+              stroke="#4f46e5"
+              strokeWidth="4"
+              strokeLinejoin="round"
+            />
+            <circle cx="82" cy="50" r="7" fill="#a5b4fc" />
+            <circle cx="66" cy="22.29" r="7" fill="#a5b4fc" />
+            <circle cx="34" cy="22.29" r="7" fill="#a5b4fc" />
+            <circle cx="18" cy="50" r="7" fill="#a5b4fc" />
+            <circle cx="34" cy="77.71" r="7" fill="#a5b4fc" />
+            <circle cx="66" cy="77.71" r="7" fill="#a5b4fc" />
+            <circle cx="50" cy="50" r="13" fill="#4f46e5" />
+          </svg>
+          <span className="text-base font-semibold text-gray-900 md:text-lg">Круг доверия</span>
         </div>
 
-        <div className="p-8">
-          <div className="mb-6 flex items-center gap-2">
-            <svg width="28" height="28" viewBox="0 0 100 100" aria-hidden="true">
-              <polygon
-                points="82,50 66,22.29 34,22.29 18,50 34,77.71 66,77.71"
-                fill="none"
-                stroke="#4f46e5"
-                strokeWidth="4"
-                strokeLinejoin="round"
-              />
-              <circle cx="82" cy="50" r="7" fill="#a5b4fc" />
-              <circle cx="66" cy="22.29" r="7" fill="#a5b4fc" />
-              <circle cx="34" cy="22.29" r="7" fill="#a5b4fc" />
-              <circle cx="18" cy="50" r="7" fill="#a5b4fc" />
-              <circle cx="34" cy="77.71" r="7" fill="#a5b4fc" />
-              <circle cx="66" cy="77.71" r="7" fill="#a5b4fc" />
-              <circle cx="50" cy="50" r="13" fill="#4f46e5" />
-            </svg>
-            <span className="text-lg font-semibold text-gray-900">Круг доверия</span>
-          </div>
+        <div className="mb-2 flex justify-center md:mb-4">
+          <NetworkPreview />
+        </div>
 
-          <h1 className="mb-2 text-2xl font-semibold text-gray-900">
-            Не случайный специалист. Тот, кого знают ваши знакомые.
+        <div className="w-full text-left md:mx-auto md:w-fit">
+          <h1 className="mb-1 text-xl font-semibold text-gray-900 md:mb-2 md:text-3xl">
+            Ваш круг знает нужного человека
           </h1>
-          <p className="mb-6 text-sm text-gray-500">
+          <p className="mb-3 text-sm text-gray-500 md:mb-8 md:text-lg">
             Цепочка личных рекомендаций — вместо поиска наугад.
           </p>
 
-          <div className="mb-7 space-y-4">
-            <div className="flex items-start gap-3">
+          <div className="mb-3 flex flex-col items-start space-y-1.5 md:mb-8 md:space-y-4">
+            <div className="flex items-center gap-2 md:gap-3">
               <ValueIcon path={<><path d="M9 17H7A5 5 0 0 1 7 7h2" /><path d="M15 7h2a5 5 0 1 1 0 10h-2" /><line x1="8" y1="12" x2="16" y2="12" /></>} />
-              <div>
-                <div className="text-sm font-medium text-gray-900">Вам — только настоящие рекомендации</div>
-                <p className="text-sm text-gray-500">Каждая связь в графе — человек, который лично ручается.</p>
-              </div>
+              <div className="text-sm font-medium text-gray-900 md:text-base">Только настоящие рекомендации</div>
             </div>
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               <ValueIcon path={<><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>} />
-              <div>
-                <div className="text-sm font-medium text-gray-900">Специалистам — больше доверия, больше клиентов</div>
-                <p className="text-sm text-gray-500">Чем в большем числе кругов вы состоите, тем чаще к вам возвращаются.</p>
-              </div>
+              <div className="text-sm font-medium text-gray-900 md:text-base">Больше доверия — больше клиентов</div>
             </div>
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               <ValueIcon path={<><circle cx="7" cy="7" r="2.5" /><circle cx="17" cy="7" r="2.5" /><circle cx="12" cy="17" r="2.5" /><line x1="8.8" y1="8.5" x2="15.2" y2="8.5" /><line x1="8" y1="9" x2="10.5" y2="15" /><line x1="16" y1="9" x2="13.5" y2="15" /></>} />
-              <div>
-                <div className="text-sm font-medium text-gray-900">Всем — сеть растёт сама</div>
-                <p className="text-sm text-gray-500">Пригласили одного — круг расширился на всех его знакомых.</p>
-              </div>
+              <div className="text-sm font-medium text-gray-900 md:text-base">Поделились раз — помогаете постоянно</div>
             </div>
           </div>
+        </div>
 
+        <div className="w-full md:mx-auto md:max-w-xs">
           <Link
             href="/signup"
-            className="mb-2 block min-h-[44px] w-full rounded bg-indigo-600 px-3 py-2.5 text-center text-sm font-medium text-white hover:bg-indigo-700"
+            className="mb-2 block min-h-[44px] rounded bg-indigo-600 px-3 py-2.5 text-center text-sm font-medium text-white hover:bg-indigo-700"
           >
             Зарегистрироваться
           </Link>
           <Link
             href="/login"
-            className="block min-h-[44px] w-full rounded border border-gray-300 px-3 py-2.5 text-center text-sm text-gray-700 hover:bg-gray-50"
+            className="block min-h-[44px] rounded border border-gray-300 px-3 py-2.5 text-center text-sm text-gray-700 hover:bg-gray-50"
           >
             Войти
           </Link>
