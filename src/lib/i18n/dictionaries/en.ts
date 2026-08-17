@@ -2,7 +2,7 @@ import type { Dictionary } from "./ru";
 
 const en: Dictionary = {
   common: {
-    brand: "Senim",
+    brand: "semin.online",
     tagline: "Specialists your friends personally know — not strangers from a chat",
     or: "or",
     loading: "Loading…",

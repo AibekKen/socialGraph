@@ -170,7 +170,7 @@ const ru: {
   };
 } = {
   common: {
-    brand: "Senim",
+    brand: "semin.online",
     tagline: "Специалисты, которых лично знают ваши знакомые — а не случайные люди из чата",
     or: "или",
     loading: "Загрузка…",

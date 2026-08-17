@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Senim",
+  title: "semin.online",
   description: "Круг доверия — находите специалистов через людей, которым вы доверяете.",
 };
 

@@ -2,7 +2,7 @@ import type { Dictionary } from "./ru";
 
 const kk: Dictionary = {
   common: {
-    brand: "Senim",
+    brand: "semin.online",
     tagline: "Таныстарыңыз жеке білетін мамандар — чаттан кездейсоқ адамдар емес",
     or: "немесе",
     loading: "Жүктелуде…",
