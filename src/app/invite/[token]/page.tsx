@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslation } from "@/lib/i18n/LanguageProvider";
 
 export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
   const router = useRouter();
+  const { t, ready } = useTranslation();
   const [status, setStatus] = useState<"checking" | "accepting" | "done" | "error">("checking");
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +33,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
       if (error) {
         setStatus("error");
         setError(error.message === "Приглашение не найдено или уже использовано"
-          ? "Ссылка недействительна или уже использована"
+          ? t.invite.invalidLink
           : error.message);
         return;
       }
@@ -41,15 +43,17 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
     })();
   }, [token, router]);
 
+  if (!ready) return null;
+
   return (
     <div className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-        {status === "checking" && <p className="text-sm text-gray-500">Проверяем приглашение…</p>}
-        {status === "accepting" && <p className="text-sm text-gray-500">Подключаем вас к сети знакомств…</p>}
+        {status === "checking" && <p className="text-sm text-gray-500">{t.invite.checking}</p>}
+        {status === "accepting" && <p className="text-sm text-gray-500">{t.invite.accepting}</p>}
         {status === "done" && (
           <>
-            <p className="mb-1 text-lg font-semibold text-gray-900">Готово!</p>
-            <p className="text-sm text-gray-500">Заявка на связь отправлена. Переходим в граф…</p>
+            <p className="mb-1 text-lg font-semibold text-gray-900">{t.invite.doneTitle}</p>
+            <p className="text-sm text-gray-500">{t.invite.doneBody}</p>
           </>
         )}
         {status === "error" && (
@@ -59,7 +63,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
               onClick={() => router.push("/graph")}
               className="min-h-[40px] w-full rounded border border-gray-300 px-3 text-sm text-gray-600 hover:bg-gray-50"
             >
-              К графу
+              {t.common.toGraph}
             </button>
           </>
         )}

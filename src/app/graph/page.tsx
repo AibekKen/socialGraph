@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import ContactGraph, { GraphLink, GraphNode } from "@/components/ContactGraph";
 import { createClient } from "@/lib/supabase/client";
 import { formatPhoneMask } from "@/lib/phone";
+import { useTranslation } from "@/lib/i18n/LanguageProvider";
+import AppHeader from "@/components/AppHeader";
 import {
   loadMe,
   loadEgoNetwork,
@@ -34,6 +36,7 @@ function mergeLinks(prev: GraphLink[], added: GraphLink[]): GraphLink[] {
 
 export default function GraphPage() {
   const router = useRouter();
+  const { t, ready } = useTranslation();
 
   const [meId, setMeId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -59,6 +62,9 @@ export default function GraphPage() {
   const [lastClicked, setLastClicked] = useState<GraphNode | null>(null);
   const [lastClickedDegree, setLastClickedDegree] = useState<number | null>(null);
   const [recommendations, setRecommendations] = useState<{ authorId: string; authorName: string; comment: string }[]>([]);
+  const [confirmAction, setConfirmAction] = useState<"remove" | "block" | null>(null);
+  const [actionPending, setActionPending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   type PendingRequest = {
     connectionId: string;
@@ -132,7 +138,7 @@ export default function GraphPage() {
 
     if (error) {
       setInviteError(
-        error.code === "23505" ? "Заявка этому человеку уже отправлена ранее" : error.message
+        error.code === "23505" ? t.graph.errors.alreadySent : error.message
       );
       return;
     }
@@ -144,17 +150,28 @@ export default function GraphPage() {
     const supabase = createClient();
     const { data } = await supabase
       .from("connections")
-      .select("id, requester_id, profiles!connections_requester_id_fkey(full_name, headline)")
+      .select("id, requester_id")
       .eq("addressee_id", uid)
       .eq("status", "pending");
 
+    const rows = data ?? [];
+    const requesterIds = Array.from(new Set(rows.map((row) => row.requester_id as string)));
+
+    const profilesById = new Map<string, { full_name: string | null; headline: string | null }>();
+    if (requesterIds.length > 0) {
+      const { data: profiles } = await supabase.rpc("get_public_profiles", { ids: requesterIds });
+      for (const profile of profiles ?? []) {
+        profilesById.set(profile.id, profile);
+      }
+    }
+
     setPendingRequests(
-      (data ?? []).map((row) => {
-        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+      rows.map((row) => {
+        const profile = profilesById.get(row.requester_id as string);
         return {
           connectionId: row.id as string,
           requesterId: row.requester_id as string,
-          requesterName: profile?.full_name ?? "Без имени",
+          requesterName: profile?.full_name ?? t.common.noName,
           requesterHeadline: profile?.headline ?? null,
         };
       })
@@ -251,6 +268,8 @@ export default function GraphPage() {
     setLastClicked(node);
     setLastClickedDegree(null);
     setRecommendations([]);
+    setConfirmAction(null);
+    setActionError(null);
 
     const degree = await loadDegree(node.id);
     setLastClickedDegree(degree);
@@ -267,6 +286,8 @@ export default function GraphPage() {
     setShowSuggestions(false);
     setQuery(person.name);
     setPathLoading(true);
+    setConfirmAction(null);
+    setActionError(null);
 
     // сам искомый человек должен появиться на графе и подсветиться, даже
     // если подтверждённого пути к нему ещё нет — иначе поиск выглядит так,
@@ -296,6 +317,47 @@ export default function GraphPage() {
     setSelected(null);
     setPath(null);
     setQuery("");
+    setConfirmAction(null);
+    setActionError(null);
+  };
+
+  const removeFromCircle = async (person: GraphNode) => {
+    if (!meId) return;
+    setActionPending(true);
+    setActionError(null);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("connections")
+      .delete()
+      .or(
+        `and(requester_id.eq.${meId},addressee_id.eq.${person.id}),and(requester_id.eq.${person.id},addressee_id.eq.${meId})`
+      );
+    setActionPending(false);
+
+    if (error) {
+      setActionError(t.graph.actionFailed);
+      return;
+    }
+    setNodes((prev) => prev.filter((n) => n.id !== person.id));
+    setLinks((prev) => prev.filter((l) => l.source !== person.id && l.target !== person.id));
+    resetToMe();
+  };
+
+  const blockPerson = async (person: GraphNode) => {
+    if (!meId) return;
+    setActionPending(true);
+    setActionError(null);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("block_person", { p_blocked_id: person.id });
+    setActionPending(false);
+
+    if (error) {
+      setActionError(t.graph.actionFailed);
+      return;
+    }
+    setNodes((prev) => prev.filter((n) => n.id !== person.id));
+    setLinks((prev) => prev.filter((l) => l.source !== person.id && l.target !== person.id));
+    resetToMe();
   };
 
   const createInvite = async () => {
@@ -315,14 +377,14 @@ export default function GraphPage() {
 
     setInviteSaving(false);
     if (error || !data) {
-      setInviteError(error?.message ?? "Не удалось создать приглашение");
+      setInviteError(error?.message ?? t.graph.errors.inviteFailed);
       return;
     }
     const link = `${window.location.origin}/invite/${data.token}`;
     setInviteLink(link);
 
     if (invitePhone.trim()) {
-      const text = `Привет! Присоединяйся к моей сети знакомых — так тебя смогут найти через общих знакомых, когда будут искать специалиста вроде тебя: ${link}`;
+      const text = t.graph.whatsappInviteText(link);
       window.open(`https://wa.me/${invitePhone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`, "_blank");
     }
   };
@@ -358,121 +420,113 @@ export default function GraphPage() {
     return { visibleNodes: nodes, visibleLinks: links };
   }, [path, nodes, links]);
 
-  if (initializing) {
-    return <div className="flex h-dvh items-center justify-center text-sm text-gray-500">Загрузка графа…</div>;
+  if (!ready || initializing) {
+    return <div className="flex h-dvh items-center justify-center text-sm text-gray-500">{t.graph.loadingGraph}</div>;
   }
 
   return (
     <div className="flex h-dvh w-screen flex-col overflow-hidden">
-      <header className="flex flex-col gap-2 border-b border-gray-200 p-3 md:flex-row md:items-center md:gap-4 md:px-4 md:py-3">
-        <div className="flex w-full items-center justify-between gap-2 md:w-auto">
-          <h1 className="flex items-center gap-2 text-base font-semibold md:text-lg">
-            <svg width="24" height="24" viewBox="0 0 100 100" aria-hidden="true">
-              <polygon
-                points="82,50 66,22.29 34,22.29 18,50 34,77.71 66,77.71"
-                fill="none"
-                stroke="#4f46e5"
-                strokeWidth="4"
-                strokeLinejoin="round"
-              />
-              <circle cx="82" cy="50" r="7" fill="#a5b4fc" />
-              <circle cx="66" cy="22.29" r="7" fill="#a5b4fc" />
-              <circle cx="34" cy="22.29" r="7" fill="#a5b4fc" />
-              <circle cx="18" cy="50" r="7" fill="#a5b4fc" />
-              <circle cx="34" cy="77.71" r="7" fill="#a5b4fc" />
-              <circle cx="66" cy="77.71" r="7" fill="#a5b4fc" />
-              <circle cx="50" cy="50" r="13" fill="#4f46e5" />
-            </svg>
-            Круг доверия
-          </h1>
-          {userEmail && (
-            <div className="flex items-center gap-2 text-xs text-gray-500 md:order-last">
+      <AppHeader href="/graph">
+        {userEmail && (
+          <>
+            <button
+              onClick={() => setShowInviteModal(true)}
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50 md:flex"
+              aria-label={t.graph.addContact}
+              title={t.graph.addContact}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <line x1="19" y1="8" x2="19" y2="14" />
+                <line x1="16" y1="11" x2="22" y2="11" />
+              </svg>
+            </button>
+
+            <div className="relative">
               <button
-                onClick={() => setShowInviteModal(true)}
-                className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50 md:flex"
-                aria-label="Добавить контакт"
-                title="Добавить контакт"
+                onClick={() => setShowNotifications((v) => !v)}
+                className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                aria-label={t.common.notifications}
+                title={t.common.notifications}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <line x1="19" y1="8" x2="19" y2="14" />
-                  <line x1="16" y1="11" x2="22" y2="11" />
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
+                {pendingRequests.length > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                    {pendingRequests.length}
+                  </span>
+                )}
               </button>
 
-              <div className="relative">
-                <button
-                  onClick={() => setShowNotifications((v) => !v)}
-                  className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                  aria-label="Уведомления"
-                  title="Уведомления"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                  {pendingRequests.length > 0 && (
-                    <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-                      {pendingRequests.length}
-                    </span>
-                  )}
-                </button>
-
-                {showNotifications && (
-                  <div className="fixed left-2 right-2 top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-40 max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:max-h-none sm:w-80">
-                    {pendingRequests.length === 0 ? (
-                      <p className="p-3 text-gray-500">Новых заявок нет</p>
-                    ) : (
-                      pendingRequests.map((r) => (
-                        <div key={r.connectionId} className="border-b border-gray-100 p-3 last:border-b-0">
-                          <div className="font-medium text-gray-900">{r.requesterName}</div>
-                          {r.requesterHeadline && <div className="text-gray-500">{r.requesterHeadline}</div>}
-                          <p className="mt-1 text-xs text-gray-500">
-                            Хочет добавить вас в свою сеть знакомств. Благодаря этому вас смогут найти
-                            через общих знакомых, когда будут искать специалиста вроде вас.
-                          </p>
-                          <div className="mt-2 flex gap-2">
-                            <button
-                              onClick={() => respondToRequest(r.connectionId, true)}
-                              className="flex-1 rounded bg-indigo-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
-                            >
-                              Принять
-                            </button>
-                            <button
-                              onClick={() => respondToRequest(r.connectionId, false)}
-                              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
-                            >
-                              Отклонить
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
+              {showNotifications && (
+                <div className="fixed left-2 right-2 top-[calc(env(safe-area-inset-top,0px)+3.25rem)] z-40 max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:max-h-none sm:w-80">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+                    <span className="font-medium text-gray-900">{t.graph.notificationsTitle}</span>
+                    <button
+                      onClick={() => setShowNotifications(false)}
+                      className="-mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+                      aria-label={t.common.close}
+                      title={t.common.close}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
                   </div>
-                )}
-              </div>
-
-              <a
-                href="/profile"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                aria-label="Профиль"
-                title="Профиль"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </a>
-              <span className="hidden truncate max-w-[140px] sm:inline">{userEmail}</span>
+                  {pendingRequests.length === 0 ? (
+                    <p className="p-3 text-gray-500">{t.graph.noNewRequests}</p>
+                  ) : (
+                    pendingRequests.map((r) => (
+                      <div key={r.connectionId} className="border-b border-gray-100 p-3 last:border-b-0">
+                        <div className="font-medium text-gray-900">{r.requesterName}</div>
+                        {r.requesterHeadline && <div className="text-gray-500">{r.requesterHeadline}</div>}
+                        <p className="mt-1 text-xs text-gray-500">{t.graph.requestBody}</p>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            onClick={() => respondToRequest(r.connectionId, true)}
+                            className="flex-1 rounded bg-indigo-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+                          >
+                            {t.graph.accept}
+                          </button>
+                          <button
+                            onClick={() => respondToRequest(r.connectionId, false)}
+                            className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                          >
+                            {t.graph.decline}
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
+            <a
+              href="/profile"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+              aria-label={t.common.profile}
+              title={t.common.profile}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </a>
+            <span className="hidden truncate max-w-[140px] text-xs text-gray-500 sm:inline">{userEmail}</span>
+          </>
+        )}
+      </AppHeader>
+
+      <div className="border-b border-gray-200 p-3 md:px-4 md:py-3">
         <div className="relative w-full md:max-w-sm">
           <input
             className="min-h-[44px] w-full rounded border border-gray-300 px-3 text-base md:min-h-[40px] md:text-sm"
-            placeholder="Найти специалиста (напр. дизайнер)"
+            placeholder={t.graph.searchPlaceholder}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -483,7 +537,7 @@ export default function GraphPage() {
           />
           {showSuggestions && (searching || suggestions.length > 0) && (
             <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white text-sm shadow-lg">
-              {searching && <li className="px-3 py-2.5 text-gray-400">Ищем…</li>}
+              {searching && <li className="px-3 py-2.5 text-gray-400">{t.graph.searching}</li>}
               {!searching &&
                 suggestions.map((s) => (
                   <li key={s.id}>
@@ -500,36 +554,29 @@ export default function GraphPage() {
             </ul>
           )}
         </div>
-      </header>
+      </div>
 
       {!path && nodes.length <= 1 && (
         <div className="flex items-center justify-between gap-3 border-b border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
-          <span>
-            Ваша сеть пока пуста. Пригласите первого знакомого — так о нём узнают через вас, и
-            наоборот.
-          </span>
+          <span>{t.graph.emptyNetworkBanner}</span>
           <button
             onClick={() => setShowInviteModal(true)}
             className="shrink-0 rounded-full bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-700"
           >
-            Пригласить
+            {t.graph.invite}
           </button>
         </div>
       )}
 
       {!path && nodes.length > 1 && (
-        <p className="border-b border-gray-100 px-3 py-1.5 text-xs text-gray-500">
-          Нажмите на человека на графе, затем — «Раскрыть контакты». Добавьте свои полезные
-          контакты, чтобы о них узнали другие.
-        </p>
+        <p className="border-b border-gray-100 px-3 py-1.5 text-xs text-gray-500">{t.graph.hintExpand}</p>
       )}
 
       <div className="relative flex-1 overflow-hidden md:flex">
         <main className="absolute inset-0 md:static md:h-full md:flex-1">
           {nodes.length === 0 ? (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-gray-500">
-              Пока у вас нет подтверждённых знакомств. Нажмите на кнопку «+» вверху, чтобы
-              пригласить первого человека, или дождитесь, пока кто-то добавит вас.
+              {t.graph.emptyState}
             </div>
           ) : (
             <ContactGraph
@@ -555,12 +602,12 @@ export default function GraphPage() {
         >
           {(selected || lastClicked) && (
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-500 md:hidden">Информация</span>
+              <span className="text-sm font-medium text-gray-500 md:hidden">{t.graph.infoPanelTitle}</span>
               <button
                 onClick={resetToMe}
                 className="-mr-2 ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
-                aria-label="Закрыть"
-                title="Закрыть"
+                aria-label={t.common.close}
+                title={t.common.close}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -573,19 +620,19 @@ export default function GraphPage() {
           {selected && (
             <div className="text-sm">
               <div className="mb-1 flex items-center justify-between">
-                <span className="font-medium">Путь до {selected.name}</span>
+                <span className="font-medium">{t.graph.pathTo(selected.name)}</span>
                 <button onClick={backToGraph} className="text-xs text-gray-500 underline hover:text-gray-700">
-                  Назад к графу
+                  {t.graph.backToGraph}
                 </button>
               </div>
               {pathLoading ? (
-                <div className="text-gray-500">Ищем путь…</div>
+                <div className="text-gray-500">{t.graph.searchingPath}</div>
               ) : path ? (
                 <div className="text-gray-600">
                   {path.map((id) => nodes.find((n) => n.id === id)?.name ?? "…").join(" → ")}
                 </div>
               ) : (
-                <div className="text-gray-500">Нет подтверждённого пути</div>
+                <div className="text-gray-500">{t.graph.noConfirmedPath}</div>
               )}
             </div>
           )}
@@ -597,12 +644,12 @@ export default function GraphPage() {
               </div>
               {lastClicked.headline && <div className="text-gray-500">{lastClicked.headline}</div>}
               <div className="mt-1 text-gray-500">
-                Знакомых: {lastClickedDegree === null ? "…" : lastClickedDegree}
+                {t.graph.contactsCount(lastClickedDegree === null ? "…" : String(lastClickedDegree))}
               </div>
 
               {lastClicked.id !== meId && (
                 <div className="mt-4 border-t border-gray-200 pt-3">
-                  <div className="mb-1 font-medium text-gray-700">Контакты</div>
+                  <div className="mb-1 font-medium text-gray-700">{t.graph.contactsTitle}</div>
                   {lastClicked.shareContacts ? (
                     <div className="space-y-1.5">
                       {lastClicked.phone && (
@@ -635,16 +682,14 @@ export default function GraphPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="text-gray-500">Человек не разрешил делиться своими контактами</div>
+                    <div className="text-gray-500">{t.graph.noContactShare}</div>
                   )}
                 </div>
               )}
 
               {lastClicked.id !== meId && recommendations.length > 0 && (
                 <div className="mt-4 border-t border-gray-200 pt-3">
-                  <div className="mb-1 font-medium text-gray-700">
-                    Отзывы знакомых, через которых вы вышли
-                  </div>
+                  <div className="mb-1 font-medium text-gray-700">{t.graph.recommendationsTitle}</div>
                   <div className="space-y-2">
                     {recommendations.map((r) => (
                       <div key={r.authorId} className="rounded bg-gray-50 p-2">
@@ -655,11 +700,78 @@ export default function GraphPage() {
                   </div>
                 </div>
               )}
+
+              {lastClicked.id !== meId && (
+                <div className="mt-4 border-t border-gray-200 pt-3">
+                  {actionError && <p className="mb-2 text-xs text-red-600">{actionError}</p>}
+
+                  {confirmAction === null && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setConfirmAction("remove")}
+                        className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                      >
+                        {t.graph.removeContact}
+                      </button>
+                      <button
+                        onClick={() => setConfirmAction("block")}
+                        className="flex-1 rounded border border-red-300 px-2 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                      >
+                        {t.graph.blockContact}
+                      </button>
+                    </div>
+                  )}
+
+                  {confirmAction === "remove" && (
+                    <div className="rounded bg-gray-50 p-2.5 text-xs">
+                      <p className="font-medium text-gray-800">{t.graph.removeConfirmTitle(lastClicked.name)}</p>
+                      <p className="mt-0.5 text-gray-500">{t.graph.removeConfirmBody}</p>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => removeFromCircle(lastClicked)}
+                          disabled={actionPending}
+                          className="flex-1 rounded bg-gray-700 px-2 py-1.5 font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                        >
+                          {t.graph.confirmYesRemove}
+                        </button>
+                        <button
+                          onClick={() => setConfirmAction(null)}
+                          className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-gray-600 hover:bg-white"
+                        >
+                          {t.graph.confirmCancel}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {confirmAction === "block" && (
+                    <div className="rounded bg-red-50 p-2.5 text-xs">
+                      <p className="font-medium text-red-800">{t.graph.blockConfirmTitle(lastClicked.name)}</p>
+                      <p className="mt-0.5 text-red-600">{t.graph.blockConfirmBody}</p>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => blockPerson(lastClicked)}
+                          disabled={actionPending}
+                          className="flex-1 rounded bg-red-600 px-2 py-1.5 font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                        >
+                          {t.graph.confirmYesBlock}
+                        </button>
+                        <button
+                          onClick={() => setConfirmAction(null)}
+                          className="flex-1 rounded border border-red-300 px-2 py-1.5 text-red-600 hover:bg-white"
+                        >
+                          {t.graph.confirmCancel}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
           {!selected && !lastClicked && (
-            <p className="hidden text-sm text-gray-400 md:block">Выберите человека на графе</p>
+            <p className="hidden text-sm text-gray-400 md:block">{t.graph.selectPersonHint}</p>
           )}
         </aside>
       </div>
@@ -668,7 +780,7 @@ export default function GraphPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
             <div className="mb-1 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Добавить контакт</h2>
+              <h2 className="text-lg font-semibold">{t.graph.modal.title}</h2>
               <button onClick={closeInviteModal} className="text-gray-400 hover:text-gray-600">
                 ✕
               </button>
@@ -676,26 +788,24 @@ export default function GraphPage() {
 
             {modalStep === "search" && (
               <>
-                <p className="mb-3 text-sm text-gray-500">
-                  Сначала поищем — может, человек уже зарегистрирован.
-                </p>
+                <p className="mb-3 text-sm text-gray-500">{t.graph.modal.searchIntro}</p>
 
                 <input
                   autoFocus
                   value={modalQuery}
                   onChange={(e) => setModalQuery(e.target.value)}
                   className="mb-3 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
-                  placeholder="Имя или профессия"
+                  placeholder={t.graph.modal.searchPlaceholder}
                 />
 
                 {inviteError && <p className="mb-3 text-sm text-red-600">{inviteError}</p>}
 
                 <div className="mb-3 max-h-56 overflow-y-auto">
-                  {modalSearching && <p className="py-2 text-sm text-gray-400">Ищем…</p>}
+                  {modalSearching && <p className="py-2 text-sm text-gray-400">{t.graph.searching}</p>}
                   {!modalSearching &&
                     modalQuery.trim() &&
                     modalResults.length === 0 && (
-                      <p className="py-2 text-sm text-gray-400">Никого не нашли</p>
+                      <p className="py-2 text-sm text-gray-400">{t.graph.modal.noResults}</p>
                     )}
                   {!modalSearching &&
                     modalResults.map((person) => (
@@ -711,7 +821,7 @@ export default function GraphPage() {
                           onClick={() => sendConnectionRequest(person)}
                           className="shrink-0 rounded bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
                         >
-                          Отправить заявку
+                          {t.graph.modal.sendRequest}
                         </button>
                       </div>
                     ))}
@@ -725,18 +835,16 @@ export default function GraphPage() {
                   }}
                   className="min-h-[40px] w-full rounded border border-gray-300 px-3 text-sm text-gray-600 hover:bg-gray-50"
                 >
-                  Человека нет в списке — пригласить
+                  {t.graph.modal.notInList}
                 </button>
               </>
             )}
 
             {modalStep === "invite" && !inviteLink && (
               <>
-                <p className="mb-4 text-sm text-gray-500">
-                  Отправьте приглашение, чтобы добавить человека в свою сеть знакомств.
-                </p>
+                <p className="mb-4 text-sm text-gray-500">{t.graph.modal.inviteIntro}</p>
 
-                <label className="mb-1 block text-sm font-medium text-gray-700">WhatsApp</label>
+                <label className="mb-1 block text-sm font-medium text-gray-700">{t.graph.modal.whatsappLabel}</label>
                 <div className="mb-4 flex items-center gap-2">
                   <input
                     value={invitePhone}
@@ -749,8 +857,8 @@ export default function GraphPage() {
                     <button
                       type="button"
                       onClick={pickContact}
-                      title="Выбрать из контактов"
-                      aria-label="Выбрать из контактов"
+                      title={t.graph.modal.pickContact}
+                      aria-label={t.graph.modal.pickContact}
                       className="flex min-h-[40px] shrink-0 items-center justify-center rounded border border-gray-300 px-3 text-gray-600 hover:bg-gray-50"
                     >
                       📇
@@ -765,20 +873,20 @@ export default function GraphPage() {
                   disabled={inviteSaving || !invitePhone.trim()}
                   className="mb-2 min-h-[40px] w-full rounded bg-green-600 px-3 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-60"
                 >
-                  {inviteSaving ? "Отправляем…" : "Отправить приглашение"}
+                  {inviteSaving ? t.graph.modal.sending : t.graph.modal.sendInvite}
                 </button>
                 <button
                   onClick={() => setModalStep("search")}
                   className="min-h-[40px] w-full rounded border border-gray-300 px-3 text-sm text-gray-600 hover:bg-gray-50"
                 >
-                  Назад к поиску
+                  {t.graph.modal.backToSearch}
                 </button>
               </>
             )}
 
             {modalStep === "invite" && inviteLink && (
               <>
-                <p className="mb-3 text-sm text-gray-500">Ссылка готова — WhatsApp уже открылся:</p>
+                <p className="mb-3 text-sm text-gray-500">{t.graph.modal.linkReady}</p>
                 <div className="mb-3 flex items-center gap-2">
                   <input
                     readOnly
@@ -794,20 +902,20 @@ export default function GraphPage() {
                     }}
                     className="min-h-[40px] shrink-0 rounded border border-gray-300 px-3 text-sm hover:bg-gray-50"
                   >
-                    {linkCopied ? "Скопировано ✓" : "Скопировать"}
+                    {linkCopied ? t.graph.modal.copied : t.graph.modal.copy}
                   </button>
                 </div>
 
                 {invitePhone.trim() && (
                   <a
                     href={`https://wa.me/${invitePhone.replace(/\D/g, "")}?text=${encodeURIComponent(
-                      `Привет! Присоединяйся к моей сети знакомых — так тебя смогут найти через общих знакомых, когда будут искать специалиста вроде тебя: ${inviteLink}`
+                      t.graph.whatsappInviteText(inviteLink)
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mb-3 block min-h-[40px] rounded bg-green-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-green-700"
                   >
-                    Открыть WhatsApp ещё раз
+                    {t.graph.modal.openWhatsappAgain}
                   </a>
                 )}
 
@@ -815,7 +923,7 @@ export default function GraphPage() {
                   onClick={closeInviteModal}
                   className="min-h-[40px] w-full rounded border border-gray-300 px-3 text-sm text-gray-600 hover:bg-gray-50"
                 >
-                  Готово
+                  {t.graph.modal.done}
                 </button>
               </>
             )}
@@ -823,14 +931,14 @@ export default function GraphPage() {
             {modalStep === "sent" && (
               <>
                 <p className="mb-4 text-sm text-gray-600">
-                  Заявка на связь отправлена пользователю <span className="font-medium">{sentToName}</span>.
-                  Как только он подтвердит — вы увидите его в графе.
+                  {t.graph.modal.sentToPrefix} <span className="font-medium">{sentToName}</span>.{" "}
+                  {t.graph.modal.sentToSuffix}
                 </p>
                 <button
                   onClick={closeInviteModal}
                   className="min-h-[40px] w-full rounded bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700"
                 >
-                  Готово
+                  {t.graph.modal.done}
                 </button>
               </>
             )}

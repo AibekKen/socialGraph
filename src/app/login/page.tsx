@@ -4,9 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslation } from "@/lib/i18n/LanguageProvider";
+import AppHeader from "@/components/AppHeader";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t, ready } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +25,7 @@ export default function LoginPage() {
 
     setLoading(false);
     if (error) {
-      setError(error.message === "Invalid login credentials" ? "Неверный email или пароль" : error.message);
+      setError(error.message === "Invalid login credentials" ? t.auth.login.invalidCredentials : error.message);
       return;
     }
 
@@ -40,16 +43,19 @@ export default function LoginPage() {
     if (error) setError(error.message);
   };
 
+  if (!ready) return null;
+
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
+    <div className="flex min-h-dvh flex-col bg-gray-50">
+      <AppHeader />
+
+      <div className="flex flex-1 items-center justify-center p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h1 className="mb-1 text-xl font-semibold">Вход</h1>
-        <p className="mb-5 text-sm text-gray-500">
-          Специалисты, которых лично знают ваши знакомые — а не случайные люди из чата
-        </p>
+        <h1 className="mb-1 text-xl font-semibold">{t.auth.login.title}</h1>
+        <p className="mb-5 text-sm text-gray-500">{t.common.tagline}</p>
 
         <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="email">
-          Email
+          {t.auth.login.emailLabel}
         </label>
         <input
           id="email"
@@ -63,7 +69,7 @@ export default function LoginPage() {
         />
 
         <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="password">
-          Пароль
+          {t.auth.login.passwordLabel}
         </label>
         <input
           id="password"
@@ -83,12 +89,12 @@ export default function LoginPage() {
           disabled={loading}
           className="min-h-[40px] w-full rounded bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
         >
-          {loading ? "Входим…" : "Войти"}
+          {loading ? t.auth.login.submitting : t.auth.login.submit}
         </button>
 
         <div className="my-4 flex items-center gap-3 text-xs text-gray-400">
           <div className="h-px flex-1 bg-gray-200" />
-          или
+          {t.common.or}
           <div className="h-px flex-1 bg-gray-200" />
         </div>
 
@@ -103,16 +109,17 @@ export default function LoginPage() {
             <path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.6l-6.6-5.6C29.6 34.5 26.9 35.5 24 35.5c-5.3 0-9.7-3.1-11.3-7.4l-6.6 5.1C9.5 39.6 16.2 44 24 44z" />
             <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.4l6.6 5.6C41.6 35.9 44 30.3 44 24c0-1.3-.1-2.6-.4-3.5z" />
           </svg>
-          Войти через Google
+          {t.auth.login.googleButton}
         </button>
 
         <p className="mt-4 text-center text-sm text-gray-500">
-          Нет аккаунта?{" "}
+          {t.auth.login.noAccount}{" "}
           <Link href="/signup" className="text-indigo-600 hover:underline">
-            Зарегистрироваться
+            {t.auth.login.signupLink}
           </Link>
         </p>
       </form>
+      </div>
     </div>
   );
 }

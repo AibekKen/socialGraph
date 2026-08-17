@@ -72,11 +72,22 @@ create table invites (
   accepted_by uuid references profiles(id) on delete set null
 );
 
+-- Блокировка: не даёт заблокированному прислать заявку заново и прячет его
+-- от блокирующего на графе/в поиске (см. 008_block_and_remove.sql).
+create table blocks (
+  blocker_id uuid not null references profiles(id) on delete cascade,
+  blocked_id uuid not null references profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (blocker_id, blocked_id),
+  check (blocker_id <> blocked_id)
+);
+
 create index connections_requester_idx on connections(requester_id);
 create index connections_addressee_idx on connections(addressee_id);
 create index reviews_subject_idx on reviews(subject_id);
 create index invites_inviter_idx on invites(inviter_id);
 create index invites_token_idx on invites(token);
+create index blocks_blocked_idx on blocks(blocked_id);
 
 -- Row Level Security -------------------------------------------------------
 
@@ -86,6 +97,7 @@ alter table profile_skills enable row level security;
 alter table connections enable row level security;
 alter table reviews enable row level security;
 alter table invites enable row level security;
+alter table blocks enable row level security;
 
 -- Свою строку профиля видно полностью всегда; чужие — только через функции
 -- get_public_profiles/search_profiles ниже, которые маскируют контакты по
@@ -115,25 +127,44 @@ create policy "user manages own profile_skills"
 -- момент может отклонить (declined) — тогда связь не видит никто, включая
 -- того, кто её создал. Плюс requester может выключить network_visible в
 -- своём профиле — тогда посторонним не видно, кого он знает, вообще.
--- Создать заявку может только requester = сам себя, обновлять статус
--- (подтвердить/отклонить) — только addressee.
+-- Дополнительно прячем от текущего пользователя любую связь, где участвует
+-- человек, состоящий с ним в блокировке (в любую сторону) — иначе
+-- заблокированный всё равно всплывает через общих знакомых на графе.
+-- Создать заявку может только requester = сам себя (и только если между
+-- участниками нет блокировки), обновлять статус (подтвердить/отклонить) —
+-- только addressee, а удалить свою связь (выйти из круга) — любой участник.
 create policy "connections visible per recommendation model"
   on connections for select to authenticated
   using (
     (
       status in ('pending', 'confirmed')
       and exists (select 1 from profiles p where p.id = requester_id and p.network_visible)
+      and not exists (
+        select 1 from blocks b
+        where (b.blocker_id = auth.uid() and b.blocked_id in (requester_id, addressee_id))
+           or (b.blocked_id = auth.uid() and b.blocker_id in (requester_id, addressee_id))
+      )
     )
     or auth.uid() = requester_id
     or auth.uid() = addressee_id
   );
 create policy "user creates own connection request"
   on connections for insert to authenticated
-  with check (auth.uid() = requester_id);
+  with check (
+    auth.uid() = requester_id
+    and not exists (
+      select 1 from blocks b
+      where (b.blocker_id = requester_id and b.blocked_id = addressee_id)
+         or (b.blocker_id = addressee_id and b.blocked_id = requester_id)
+    )
+  );
 create policy "addressee confirms or declines"
   on connections for update to authenticated
   using (auth.uid() = addressee_id)
   with check (auth.uid() = addressee_id);
+create policy "participant can delete own connection"
+  on connections for delete to authenticated
+  using (auth.uid() = requester_id or auth.uid() = addressee_id);
 
 -- Отзывы: читать может любой авторизованный. Оставить отзыв может только автор,
 -- и только если связь между author и subject подтверждена (проверяется в with check).
@@ -170,6 +201,15 @@ create policy "authenticated user can accept a pending invite"
   using (status = 'pending')
   with check (status = 'accepted' and accepted_by = auth.uid());
 
+-- Блокировка: список заблокированных виден только тому, кто блокировал —
+-- иначе заблокированный узнает, что его заблокировали.
+create policy "user reads own blocks"
+  on blocks for select to authenticated using (auth.uid() = blocker_id);
+create policy "user creates own block"
+  on blocks for insert to authenticated with check (auth.uid() = blocker_id);
+create policy "user deletes own block"
+  on blocks for delete to authenticated using (auth.uid() = blocker_id);
+
 -- Принятие приглашения создаёт connections(inviter -> новый пользователь) от
 -- имени приглашающего, хотя действие выполняет приглашённый — обычная RLS
 -- политика connections это не разрешит, поэтому нужна SECURITY DEFINER функция.
@@ -192,6 +232,14 @@ begin
     raise exception 'Нельзя принять собственное приглашение';
   end if;
 
+  if exists (
+    select 1 from blocks b
+    where (b.blocker_id = v_invite.inviter_id and b.blocked_id = auth.uid())
+       or (b.blocker_id = auth.uid() and b.blocked_id = v_invite.inviter_id)
+  ) then
+    raise exception 'Невозможно принять это приглашение';
+  end if;
+
   update invites set status = 'accepted', accepted_by = auth.uid() where id = v_invite.id;
 
   insert into connections (requester_id, addressee_id, status)
@@ -201,6 +249,30 @@ end;
 $$;
 
 grant execute on function accept_invite(text) to authenticated;
+
+-- Заблокировать: фиксируем блокировку и сразу разрываем связь между людьми
+-- (requester/addressee могли быть в любом порядке).
+create or replace function block_person(p_blocked_id uuid)
+returns void
+language plpgsql
+set search_path = public
+as $$
+begin
+  if p_blocked_id = auth.uid() then
+    raise exception 'Нельзя заблокировать самого себя';
+  end if;
+
+  insert into blocks (blocker_id, blocked_id)
+  values (auth.uid(), p_blocked_id)
+  on conflict (blocker_id, blocked_id) do nothing;
+
+  delete from connections
+  where (requester_id = auth.uid() and addressee_id = p_blocked_id)
+     or (requester_id = p_blocked_id and addressee_id = auth.uid());
+end;
+$$;
+
+grant execute on function block_person(uuid) to authenticated;
 
 -- Поиск кратчайшего пути между двумя людьми по подтверждённым связям —
 -- считается на сервере, клиенту отдаётся только готовый путь, а не весь граф.
@@ -231,6 +303,11 @@ begin
     where c.status = 'confirmed'
       and s.depth < 6
       and not (case when c.requester_id = s.current_id then c.addressee_id else c.requester_id end = any(s.path))
+      and (case when c.requester_id = s.current_id then c.addressee_id else c.requester_id end) not in (
+        select blocked_id from blocks where blocker_id = from_id
+        union
+        select blocker_id from blocks where blocked_id = from_id
+      )
   )
   select path into result
   from search
@@ -286,6 +363,11 @@ as $$
   from profiles p
   where p.visible_in_search
     and (p.full_name ilike '%' || q || '%' or p.headline ilike '%' || q || '%')
+    and not exists (
+      select 1 from blocks b
+      where (b.blocker_id = auth.uid() and b.blocked_id = p.id)
+         or (b.blocked_id = auth.uid() and b.blocker_id = p.id)
+    )
   limit 20;
 $$;
 

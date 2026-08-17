@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatPhoneMask } from "@/lib/phone";
+import { useTranslation } from "@/lib/i18n/LanguageProvider";
+import AppHeader from "@/components/AppHeader";
 
 type ProfileForm = {
   fullName: string;
@@ -30,6 +32,7 @@ const EMPTY: ProfileForm = {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { t, ready } = useTranslation();
   const [form, setForm] = useState<ProfileForm>(EMPTY);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -40,6 +43,7 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [headlineOptions, setHeadlineOptions] = useState<string[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -47,6 +51,23 @@ export default function ProfilePage() {
       setHeadlineOptions(((data ?? []) as { headline: string }[]).map((r) => r.headline));
     });
   }, []);
+
+  const loadBlocked = async (uid: string) => {
+    const supabase = createClient();
+    const { data } = await supabase.from("blocks").select("blocked_id").eq("blocker_id", uid);
+    const ids = (data ?? []).map((row) => row.blocked_id as string);
+    if (ids.length === 0) {
+      setBlockedUsers([]);
+      return;
+    }
+    const { data: profiles } = await supabase.rpc("get_public_profiles", { ids });
+    setBlockedUsers(
+      ids.map((id) => ({
+        id,
+        name: (profiles ?? []).find((p: { id: string; full_name: string | null }) => p.id === id)?.full_name ?? t.common.noName,
+      }))
+    );
+  };
 
   useEffect(() => {
     const supabase = createClient();
@@ -82,19 +103,27 @@ export default function ProfilePage() {
         setAvatarUrl(data.avatar_url ?? null);
       }
       setLoading(false);
+      loadBlocked(user.id);
     })();
   }, []);
+
+  const handleUnblock = async (id: string) => {
+    if (!userId) return;
+    const supabase = createClient();
+    await supabase.from("blocks").delete().eq("blocker_id", userId).eq("blocked_id", id);
+    setBlockedUsers((prev) => prev.filter((u) => u.id !== id));
+  };
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
 
     if (!file.type.startsWith("image/")) {
-      setAvatarError("Нужен файл изображения");
+      setAvatarError(t.profile.avatarNeedsImage);
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setAvatarError("Файл больше 5 МБ");
+      setAvatarError(t.profile.avatarTooLarge);
       return;
     }
 
@@ -121,12 +150,12 @@ export default function ProfilePage() {
 
     const { error: saveError } = await supabase
       .from("profiles")
-      .upsert({ id: userId, full_name: form.fullName || "Без имени", avatar_url: freshUrl });
+      .upsert({ id: userId, full_name: form.fullName || t.common.noName, avatar_url: freshUrl });
 
     setAvatarUploading(false);
 
     if (saveError) {
-      setAvatarError(`Файл загружен, но не сохранился в профиле: ${saveError.message}`);
+      setAvatarError(t.profile.avatarSavedError(saveError.message));
       return;
     }
 
@@ -177,33 +206,35 @@ export default function ProfilePage() {
 
   const hasAnyContact = form.phone || form.whatsapp || form.instagram;
 
-  if (loading) {
-    return <div className="flex min-h-dvh items-center justify-center text-sm text-gray-500">Загрузка…</div>;
+  if (!ready || loading) {
+    return <div className="flex min-h-dvh items-center justify-center text-sm text-gray-500">{t.common.loading}</div>;
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
+    <div className="flex min-h-dvh flex-col bg-gray-50">
+      <AppHeader href="/graph">
+        <Link
+          href="/graph"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+          aria-label={t.common.toGraph}
+          title={t.common.toGraph}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+        </Link>
+      </AppHeader>
+
+      <div className="flex flex-1 items-center justify-center p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="mb-5 flex items-center justify-between">
-          <h1 className="text-xl font-semibold">Профиль</h1>
-          <Link
-            href="/graph"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-            aria-label="К графу"
-            title="К графу"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-          </Link>
-        </div>
+        <h1 className="mb-5 text-xl font-semibold">{t.profile.title}</h1>
 
         <div className="mb-5 flex items-center gap-4">
           <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full bg-gray-100">
             {avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarUrl} alt="Аватар" className="h-full w-full object-cover" />
+              <img src={avatarUrl} alt={t.profile.avatarAlt} className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-xl font-medium text-gray-400">
                 {form.fullName ? form.fullName[0].toUpperCase() : "?"}
@@ -212,7 +243,7 @@ export default function ProfilePage() {
           </div>
           <div>
             <label className="inline-block cursor-pointer rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
-              {avatarUploading ? "Загружаем…" : "Загрузить фото"}
+              {avatarUploading ? t.profile.uploading : t.profile.uploadPhoto}
               <input
                 type="file"
                 accept="image/*"
@@ -226,7 +257,7 @@ export default function ProfilePage() {
         </div>
 
         <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="fullName">
-          Имя
+          {t.profile.nameLabel}
         </label>
         <input
           id="fullName"
@@ -238,7 +269,7 @@ export default function ProfilePage() {
         />
 
         <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="headline">
-          Специализация
+          {t.profile.specialtyLabel}
         </label>
         <input
           id="headline"
@@ -247,7 +278,7 @@ export default function ProfilePage() {
           value={form.headline}
           onChange={(e) => setForm({ ...form, headline: e.target.value })}
           className="mb-4 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
-          placeholder="Профессия"
+          placeholder={t.profile.specialtyPlaceholder}
           autoComplete="off"
         />
         <datalist id="headline-options">
@@ -257,10 +288,10 @@ export default function ProfilePage() {
         </datalist>
 
         <div className="mb-4 border-t border-gray-100 pt-4">
-          <p className="mb-3 text-sm font-medium text-gray-700">Контакты</p>
+          <p className="mb-3 text-sm font-medium text-gray-700">{t.profile.contactsTitle}</p>
 
           <label className="mb-1 block text-xs text-gray-500" htmlFor="phone">
-            Телефон
+            {t.profile.phoneLabel}
           </label>
           <input
             id="phone"
@@ -272,7 +303,7 @@ export default function ProfilePage() {
           />
 
           <label className="mb-1 block text-xs text-gray-500" htmlFor="whatsapp">
-            WhatsApp
+            {t.profile.whatsappLabel}
           </label>
           <input
             id="whatsapp"
@@ -284,7 +315,7 @@ export default function ProfilePage() {
           />
 
           <label className="mb-1 block text-xs text-gray-500" htmlFor="instagram">
-            Instagram
+            {t.profile.instagramLabel}
           </label>
           <input
             id="instagram"
@@ -297,7 +328,7 @@ export default function ProfilePage() {
         </div>
 
         <div className="mb-4 space-y-2">
-          <p className="text-sm font-medium text-gray-700">Приватность</p>
+          <p className="text-sm font-medium text-gray-700">{t.profile.privacyTitle}</p>
 
           <label className="flex items-start gap-2 rounded bg-gray-50 p-3 text-sm text-gray-700">
             <input
@@ -307,9 +338,9 @@ export default function ProfilePage() {
               className="mt-0.5"
             />
             <span>
-              Показывать мои контакты знакомым в графе
+              {t.profile.shareContactsLabel}
               {!hasAnyContact && (
-                <span className="block text-xs text-gray-500">Сначала заполните хотя бы один контакт</span>
+                <span className="block text-xs text-gray-500">{t.profile.shareContactsHint}</span>
               )}
             </span>
           </label>
@@ -322,8 +353,8 @@ export default function ProfilePage() {
               className="mt-0.5"
             />
             <span>
-              Показывать меня в поиске
-              <span className="block text-xs text-gray-500">Меня можно будет найти по имени/специальности</span>
+              {t.profile.visibleInSearchLabel}
+              <span className="block text-xs text-gray-500">{t.profile.visibleInSearchHint}</span>
             </span>
           </label>
 
@@ -335,23 +366,21 @@ export default function ProfilePage() {
               className="mt-0.5"
             />
             <span>
-              Показывать мою сеть посторонним
-              <span className="block text-xs text-gray-500">
-                Кого я знаю, смогут раскрыть на графе другие — не только мои прямые контакты
-              </span>
+              {t.profile.networkVisibleLabel}
+              <span className="block text-xs text-gray-500">{t.profile.networkVisibleHint}</span>
             </span>
           </label>
         </div>
 
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-        {saved && <p className="mb-3 text-sm text-green-600">Сохранено</p>}
+        {saved && <p className="mb-3 text-sm text-green-600">{t.profile.saved}</p>}
 
         <button
           type="submit"
           disabled={saving}
           className="min-h-[44px] w-full rounded bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
         >
-          {saving ? "Сохраняем…" : "Сохранить"}
+          {saving ? t.profile.saving : t.profile.save}
         </button>
 
         <button
@@ -359,9 +388,30 @@ export default function ProfilePage() {
           onClick={handleLogout}
           className="mt-3 min-h-[44px] w-full rounded border border-gray-300 px-3 text-sm text-gray-600 hover:bg-gray-50"
         >
-          Выйти
+          {t.profile.logout}
         </button>
+
+        {blockedUsers.length > 0 && (
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <p className="mb-2 text-sm font-medium text-gray-700">{t.profile.blockedTitle}</p>
+            <div className="space-y-1.5">
+              {blockedUsers.map((u) => (
+                <div key={u.id} className="flex items-center justify-between gap-2 rounded bg-gray-50 px-3 py-2 text-sm">
+                  <span className="truncate text-gray-700">{u.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleUnblock(u.id)}
+                    className="shrink-0 text-xs text-indigo-600 hover:underline"
+                  >
+                    {t.profile.unblock}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </form>
+      </div>
     </div>
   );
 }

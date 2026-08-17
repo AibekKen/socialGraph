@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslation } from "@/lib/i18n/LanguageProvider";
+import AppHeader from "@/components/AppHeader";
 
 export default function SignupPage() {
   return (
@@ -16,6 +18,7 @@ export default function SignupPage() {
 function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t, ready } = useTranslation();
   const inviteToken = searchParams.get("invite");
   const [fullName, setFullName] = useState("");
   const [headline, setHeadline] = useState("");
@@ -32,7 +35,7 @@ function SignupForm() {
     setMessage(null);
 
     if (!agreed) {
-      setError("Нужно согласиться на обработку персональных данных");
+      setError(t.auth.signup.mustAgree);
       return;
     }
 
@@ -55,7 +58,7 @@ function SignupForm() {
       setLoading(false);
       setError(
         error.message === "User already registered"
-          ? "Пользователь с таким email уже зарегистрирован"
+          ? t.auth.signup.alreadyRegistered
           : error.message
       );
       return;
@@ -76,13 +79,13 @@ function SignupForm() {
     }
 
     setLoading(false);
-    setMessage(`Мы отправили письмо для подтверждения на ${email}. Перейдите по ссылке в письме, чтобы завершить регистрацию.`);
+    setMessage(t.auth.signup.confirmationSent(email));
   };
 
   const handleGoogleLogin = async () => {
     setError(null);
     if (!agreed) {
-      setError("Нужно согласиться на обработку персональных данных");
+      setError(t.auth.signup.mustAgree);
       return;
     }
     const supabase = createClient();
@@ -96,17 +99,20 @@ function SignupForm() {
     if (error) setError(error.message);
   };
 
+  if (!ready) return null;
+
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50 p-4">
+    <div className="flex min-h-dvh flex-col bg-gray-50">
+      <AppHeader />
+
+      <div className="flex flex-1 items-center justify-center p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h1 className="mb-1 text-xl font-semibold">Регистрация</h1>
-        <p className="mb-5 text-sm text-gray-500">
-          Специалисты, которых лично знают ваши знакомые — а не случайные люди из чата
-        </p>
+        <h1 className="mb-1 text-xl font-semibold">{t.auth.signup.title}</h1>
+        <p className="mb-5 text-sm text-gray-500">{t.common.tagline}</p>
 
         {inviteToken && (
           <p className="mb-4 rounded bg-indigo-50 p-3 text-sm text-indigo-800">
-            Вас пригласили присоединиться к сети знакомств — после регистрации вы увидите заявку на связь.
+            {t.auth.signup.inviteBanner}
           </p>
         )}
 
@@ -115,7 +121,7 @@ function SignupForm() {
         ) : (
           <>
             <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="fullName">
-              Имя
+              {t.auth.signup.nameLabel}
             </label>
             <input
               id="fullName"
@@ -125,11 +131,11 @@ function SignupForm() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               className="mb-3 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
-              placeholder="Аслан Касымов"
+              placeholder={t.auth.signup.namePlaceholder}
             />
 
             <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="headline">
-              Профессия <span className="font-normal text-gray-400">(необязательно)</span>
+              {t.auth.signup.headlineLabel} <span className="font-normal text-gray-400">{t.auth.signup.optional}</span>
             </label>
             <input
               id="headline"
@@ -137,11 +143,11 @@ function SignupForm() {
               value={headline}
               onChange={(e) => setHeadline(e.target.value)}
               className="mb-3 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
-              placeholder="Профессия"
+              placeholder={t.auth.signup.headlinePlaceholder}
             />
 
             <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="email">
-              Email
+              {t.auth.signup.emailLabel}
             </label>
             <input
               id="email"
@@ -155,7 +161,7 @@ function SignupForm() {
             />
 
             <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="password">
-              Пароль
+              {t.auth.signup.passwordLabel}
             </label>
             <input
               id="password"
@@ -166,7 +172,7 @@ function SignupForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mb-4 min-h-[40px] w-full rounded border border-gray-300 px-3 text-base"
-              placeholder="Минимум 6 символов"
+              placeholder={t.auth.signup.passwordPlaceholder}
             />
 
             <label className="mb-4 flex items-start gap-2 text-sm text-gray-600">
@@ -177,9 +183,9 @@ function SignupForm() {
                 className="mt-0.5"
               />
               <span>
-                Я согласен(на) на{" "}
+                {t.auth.signup.agreePrefix}{" "}
                 <Link href="/legal/privacy" target="_blank" className="text-indigo-600 hover:underline">
-                  обработку и хранение персональных данных
+                  {t.auth.signup.agreeLink}
                 </Link>
               </span>
             </label>
@@ -191,12 +197,12 @@ function SignupForm() {
               disabled={loading || !agreed}
               className="min-h-[40px] w-full rounded bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
             >
-              {loading ? "Регистрируем…" : "Зарегистрироваться"}
+              {loading ? t.auth.signup.submitting : t.auth.signup.submit}
             </button>
 
             <div className="my-4 flex items-center gap-3 text-xs text-gray-400">
               <div className="h-px flex-1 bg-gray-200" />
-              или
+              {t.common.or}
               <div className="h-px flex-1 bg-gray-200" />
             </div>
 
@@ -212,18 +218,19 @@ function SignupForm() {
                 <path fill="#4CAF50" d="M24 44c5.5 0 10.5-2.1 14.3-5.6l-6.6-5.6C29.6 34.5 26.9 35.5 24 35.5c-5.3 0-9.7-3.1-11.3-7.4l-6.6 5.1C9.5 39.6 16.2 44 24 44z" />
                 <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.4l6.6 5.6C41.6 35.9 44 30.3 44 24c0-1.3-.1-2.6-.4-3.5z" />
               </svg>
-              Зарегистрироваться через Google
+              {t.auth.signup.googleButton}
             </button>
           </>
         )}
 
         <p className="mt-4 text-center text-sm text-gray-500">
-          Уже есть аккаунт?{" "}
+          {t.auth.signup.haveAccount}{" "}
           <Link href="/login" className="text-indigo-600 hover:underline">
-            Войти
+            {t.auth.signup.loginLink}
           </Link>
         </p>
       </form>
+      </div>
     </div>
   );
 }
